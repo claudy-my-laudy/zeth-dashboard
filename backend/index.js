@@ -84,6 +84,17 @@ app.get('/api/stats', async (req, res) => {
       }
     });
 
+    // By provider (extract from model field e.g. "opencode/claude-sonnet" -> "opencode")
+    const tokensByProvider = {};
+    const tasksByProvider = {};
+    const timeByProvider = {};
+    logs.forEach(l => {
+      const provider = l.model && l.model.includes('/') ? l.model.split('/')[0] : (l.model || 'unknown');
+      tokensByProvider[provider] = (tokensByProvider[provider] || 0) + (l.tokens_total || 0);
+      tasksByProvider[provider] = (tasksByProvider[provider] || 0) + 1;
+      timeByProvider[provider] = (timeByProvider[provider] || 0) + (l.duration_minutes || 0);
+    });
+
     // Daily token usage last 30 days
     const now = new Date();
     const daily = {};
@@ -104,6 +115,9 @@ app.get('/api/stats', async (req, res) => {
       totalTasks,
       tokensByCategory,
       timeByCategory,
+      tokensByProvider,
+      tasksByProvider,
+      timeByProvider,
       dailyTokens
     });
   } catch (err) {
