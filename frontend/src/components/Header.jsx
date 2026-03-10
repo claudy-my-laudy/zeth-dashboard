@@ -1,4 +1,4 @@
-export default function Header({ todayTokens, todayTasks, onAddLog }) {
+export default function Header({ todayTokens, todayTasks }) {
   const fmt = n => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n
 
   return (
@@ -23,13 +23,7 @@ export default function Header({ todayTokens, todayTasks, onAddLog }) {
             <div className="text-xs font-medium" style={{ color: '#888' }}>Today's Tasks</div>
             <div className="text-lg font-bold text-white">{todayTasks}</div>
           </div>
-          <button
-            onClick={onAddLog}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all hover:opacity-90 active:scale-95"
-            style={{ background: '#FF6B2B', color: '#fff' }}
-          >
-            <span className="text-base">+</span> Add Log
-          </button>
+
         </div>
       </div>
     </header>

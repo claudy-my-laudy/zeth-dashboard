@@ -4,14 +4,12 @@ import Header from './components/Header'
 import StatsRow from './components/StatsRow'
 import Charts from './components/Charts'
 import ActivityLog from './components/ActivityLog'
-import AddLogModal from './components/AddLogModal'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3002'
 
 export default function App() {
   const [stats, setStats] = useState(null)
   const [logs, setLogs] = useState([])
-  const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const fetchData = useCallback(async () => {
@@ -39,7 +37,6 @@ export default function App() {
       <Header
         todayTokens={todayTokens}
         todayTasks={todayLogs.length}
-        onAddLog={() => setShowModal(true)}
       />
 
       {loading ? (
@@ -57,16 +54,6 @@ export default function App() {
         </main>
       )}
 
-      {showModal && (
-        <AddLogModal
-          onClose={() => setShowModal(false)}
-          onSave={async (data) => {
-            await axios.post(`${API}/api/logs`, data)
-            setShowModal(false)
-            fetchData()
-          }}
-        />
-      )}
     </div>
   )
 }
