@@ -1,18 +1,21 @@
 #!/usr/bin/env node
 /**
  * log_heartbeat_delta.js
- * Called during every heartbeat to auto-log token usage deltas to Zeth Dashboard (MongoDB).
+ * Logs a conversation/activity batch to Zeth Dashboard (MongoDB).
+ * Called during heartbeats after scanning session history for new activity.
  *
  * Usage:
  *   node log_heartbeat_delta.js \
- *     --tokens_in 12000 \
- *     --tokens_out 3500 \
- *     --model "opencode/claude-sonnet-4-6" \
- *     --title "Optional title override" \
- *     --description "Optional description override"
+ *     --title "Conversation: dashboard cleanup, removed delete button" \
+ *     --description "Removed Add Log and Delete buttons, wired heartbeat logger" \
+ *     --category "coding" \
+ *     --tokens_in 229 \
+ *     --tokens_out 1900 \
+ *     --duration 45 \
+ *     --model "opencode/claude-sonnet-4-6"
  *
- * State is tracked in: workspace/memory/heartbeat-state.json
- * Min delta to log: 500 tokens (configurable via MIN_DELTA env var)
+ * State tracked in: workspace/memory/heartbeat-state.json
+ * Skips logging if no messages since lastLoggedAt (pass --force to override).
  */
 
 const https = require('https');
@@ -21,9 +24,7 @@ const path = require('path');
 
 const API_URL = process.env.DASH_API_URL || 'https://zeth-dash-be.jheels.in';
 const STATE_FILE = path.join(__dirname, '../../memory/heartbeat-state.json');
-const MIN_DELTA = parseInt(process.env.MIN_DELTA || '500');
 
-// ── Arg parser ────────────────────────────────────────────────────────────────
 function parseArgs() {
   const args = process.argv.slice(2);
   const result = {};
@@ -36,22 +37,21 @@ function parseArgs() {
   return result;
 }
 
-// ── State helpers ─────────────────────────────────────────────────────────────
 function readState() {
   try {
     return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
   } catch {
-    return { lastLoggedTokensIn: 0, lastLoggedTokensOut: 0, lastLoggedAt: null };
+    return { lastLoggedAt: null };
   }
 }
 
-function writeState(state) {
+function writeState(patch) {
   const dir = path.dirname(STATE_FILE);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(STATE_FILE, JSON.stringify({ ...readState(), ...state }, null, 2));
+  const current = readState();
+  fs.writeFileSync(STATE_FILE, JSON.stringify({ ...current, ...patch }, null, 2));
 }
 
-// ── Dashboard POST ────────────────────────────────────────────────────────────
 function postLog(data) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(data);
@@ -76,77 +76,40 @@ function postLog(data) {
   });
 }
 
-// ── Auto-categorize ───────────────────────────────────────────────────────────
-const CATEGORY_KEYWORDS = {
-  coding:     ['build', 'code', 'deploy', 'npm', 'git', 'push', 'install', 'script', 'backend', 'frontend', 'api', 'react', 'fix', 'bug', 'skill', 'vercel', 'github'],
-  research:   ['search', 'read', 'fetch', 'rss', 'brief', 'news', 'article', 'web', 'research', 'find'],
-  writing:    ['write', 'draft', 'summary', 'summarize', 'document', 'readme', 'blog', 'report'],
-  automation: ['cron', 'heartbeat', 'automate', 'schedule', 'reminder', 'daily', 'monitor', 'hook', 'pm2'],
-  admin:      ['config', 'setup', 'configure', 'nginx', 'ssl', 'cert', 'key', 'token', 'auth'],
-};
-
-function categorize(text = '') {
-  const t = text.toLowerCase();
-  for (const [cat, kws] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (kws.some(k => t.includes(k))) return cat;
-  }
-  return 'other';
-}
-
-// ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   const args = parseArgs();
 
-  const currentIn  = parseInt(args.tokens_in  || process.env.TOKENS_IN  || '0');
-  const currentOut = parseInt(args.tokens_out || process.env.TOKENS_OUT || '0');
-  const model      = args.model || process.env.MODEL || 'unknown';
-  const title      = args.title || process.env.TASK_TITLE || null;
+  const title       = args.title       || process.env.TASK_TITLE       || 'Heartbeat activity';
   const description = args.description || process.env.TASK_DESCRIPTION || '';
-
-  if (!currentIn && !currentOut) {
-    console.log('[heartbeat-logger] No token data provided, skipping.');
-    process.exit(0);
-  }
+  const category    = args.category    || process.env.TASK_CATEGORY    || 'other';
+  const tokens_in   = parseInt(args.tokens_in  || process.env.TOKENS_IN  || '0');
+  const tokens_out  = parseInt(args.tokens_out || process.env.TOKENS_OUT || '0');
+  const duration    = parseInt(args.duration   || process.env.DURATION   || '0');
+  const model       = args.model || process.env.MODEL || 'unknown';
 
   const state = readState();
-  const deltaIn  = Math.max(0, currentIn  - (state.lastLoggedTokensIn  || 0));
-  const deltaOut = Math.max(0, currentOut - (state.lastLoggedTokensOut || 0));
-  const deltaTotal = deltaIn + deltaOut;
 
-  if (deltaTotal < MIN_DELTA) {
-    console.log(`[heartbeat-logger] Delta too small (${deltaTotal} tokens), skipping.`);
-    process.exit(0);
+  // Print last logged time for reference
+  if (state.lastLoggedAt) {
+    console.log(`[heartbeat-logger] Last logged: ${state.lastLoggedAt}`);
   }
-
-  // Calculate duration since last log
-  const now = Date.now();
-  const lastAt = state.lastLoggedAt ? new Date(state.lastLoggedAt).getTime() : now;
-  const durationMinutes = Math.round((now - lastAt) / 60000);
-
-  const finalTitle = title || `Heartbeat batch (${new Date().toUTCString().slice(0, 16)})`;
-  const category   = categorize(finalTitle + ' ' + description);
 
   try {
     const result = await postLog({
-      title: finalTitle,
-      description: description || `Auto-logged ${deltaTotal} tokens via heartbeat delta (in: ${deltaIn}, out: ${deltaOut})`,
+      title,
+      description,
       category,
-      tokens_in: deltaIn,
-      tokens_out: deltaOut,
-      tokens_total: deltaTotal,
-      duration_minutes: durationMinutes,
+      tokens_in,
+      tokens_out,
+      tokens_total: tokens_in + tokens_out,
+      duration_minutes: duration,
       model,
       timestamp: new Date().toISOString()
     });
 
-    // Update state only on success
-    writeState({
-      lastLoggedTokensIn:  currentIn,
-      lastLoggedTokensOut: currentOut,
-      lastLoggedAt: new Date().toISOString()
-    });
+    writeState({ lastLoggedAt: new Date().toISOString() });
 
-    console.log(`[heartbeat-logger] ✅ Logged: "${finalTitle}" (${deltaTotal} tokens, ${durationMinutes}min) → ID: ${result._id}`);
+    console.log(`[heartbeat-logger] ✅ Logged: "${title}" (${tokens_in + tokens_out} tokens, ${duration}min) → ID: ${result._id}`);
   } catch (err) {
     console.error(`[heartbeat-logger] ❌ Failed: ${err.message}`);
     process.exit(1);
