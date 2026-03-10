@@ -19,7 +19,7 @@ function Badge({ category }) {
   )
 }
 
-export default function ActivityLog({ logs, onDelete }) {
+export default function ActivityLog({ logs }) {
   const [page, setPage] = useState(1)
   const [filter, setFilter] = useState('all')
   const PER_PAGE = 20
@@ -55,7 +55,7 @@ export default function ActivityLog({ logs, onDelete }) {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '1px solid #2A2A2A' }}>
-              {['Timestamp', 'Category', 'Title', 'Tokens', 'Duration', 'Model', ''].map(h => (
+              {['Timestamp', 'Category', 'Title', 'Tokens', 'Duration', 'Model'].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs font-medium" style={{ color: '#666' }}>{h}</th>
               ))}
             </tr>
@@ -73,13 +73,6 @@ export default function ActivityLog({ logs, onDelete }) {
                 <td className="px-4 py-3 font-mono text-xs" style={{ color: '#FF6B2B' }}>{fmt(log.tokens_total)}</td>
                 <td className="px-4 py-3 text-xs" style={{ color: '#888' }}>{log.duration_minutes}m</td>
                 <td className="px-4 py-3 text-xs" style={{ color: '#555' }}>{log.model}</td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => { if (confirm('Delete this log?')) onDelete(log._id) }}
-                    className="text-xs px-2 py-1 rounded opacity-40 hover:opacity-100 transition-opacity"
-                    style={{ color: '#f87171' }}
-                  >✕</button>
-                </td>
               </tr>
             ))}
           </tbody>

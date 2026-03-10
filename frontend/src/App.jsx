@@ -47,10 +47,7 @@ export default function App() {
         <main className="max-w-screen-2xl mx-auto px-6 pb-12 space-y-8">
           <StatsRow stats={stats} logs={logs} />
           <Charts stats={stats} />
-          <ActivityLog logs={logs} onDelete={async (id) => {
-            await axios.delete(`${API}/api/logs/${id}`)
-            fetchData()
-          }} />
+          <ActivityLog logs={logs} />
         </main>
       )}
 
