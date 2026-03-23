@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const { VALID_CATEGORIES, normalizeLogPayload } = require('./log_normalizer');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -19,7 +20,7 @@ const taskLogSchema = new mongoose.Schema({
   timestamp: { type: String, default: () => new Date().toISOString() },
   category: {
     type: String,
-    enum: ['coding', 'research', 'writing', 'automation', 'admin', 'other'],
+    enum: VALID_CATEGORIES,
     required: true
   },
   title: { type: String, required: true },
@@ -46,7 +47,8 @@ app.get('/api/logs', async (req, res) => {
 // POST /api/logs
 app.post('/api/logs', async (req, res) => {
   try {
-    const log = new TaskLog(req.body);
+    const normalized = normalizeLogPayload(req.body);
+    const log = new TaskLog(normalized);
     await log.save();
     res.status(201).json(log);
   } catch (err) {

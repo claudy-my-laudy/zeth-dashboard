@@ -9,28 +9,9 @@
  */
 
 const https = require('https');
-const fs = require('fs');
-const path = require('path');
+const { normalizeLogPayload } = require('./log_normalizer');
 
 const API_URL = 'https://zeth-dash-be.jheels.in';
-const STATE_FILE = path.join(__dirname, '.last_logged_session.json');
-
-// Keywords to auto-categorize tasks
-const CATEGORY_KEYWORDS = {
-  coding: ['build', 'code', 'deploy', 'npm', 'git', 'push', 'install', 'script', 'backend', 'frontend', 'api', 'react', 'express', 'fix', 'bug', 'skill', 'package', 'vercel', 'github'],
-  research: ['search', 'read', 'fetch', 'rss', 'brief', 'news', 'article', 'jina', 'web', 'research', 'find', 'look up'],
-  writing: ['write', 'draft', 'summary', 'summarize', 'document', 'readme', 'blog', 'report', 'memo'],
-  automation: ['cron', 'heartbeat', 'automate', 'schedule', 'reminder', 'daily', 'monitor', 'hook', 'pm2'],
-  admin: ['config', 'setup', 'configure', 'nginx', 'ssl', 'cert', 'key', 'token', 'auth', 'password'],
-};
-
-function categorize(title = '', description = '') {
-  const text = (title + ' ' + description).toLowerCase();
-  for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some(k => text.includes(k))) return cat;
-  }
-  return 'other';
-}
 
 function postLog(data) {
   return new Promise((resolve, reject) => {
@@ -64,27 +45,24 @@ async function main() {
   let hookData = {};
   try { hookData = JSON.parse(input); } catch {}
 
-  const title = hookData.title || process.env.TASK_TITLE || 'Unnamed task';
-  const description = hookData.description || process.env.TASK_DESCRIPTION || '';
-  const tokens_in = parseInt(hookData.tokens_in || process.env.TOKENS_IN || '0');
-  const tokens_out = parseInt(hookData.tokens_out || process.env.TOKENS_OUT || '0');
-  const duration_minutes = parseInt(hookData.duration_minutes || process.env.DURATION || '0');
-  const model = hookData.model || process.env.MODEL || 'unknown';
-  const category = hookData.category || categorize(title, description);
+  const normalized = normalizeLogPayload({
+    title: hookData.title || process.env.TASK_TITLE || 'Unnamed task',
+    description: hookData.description || process.env.TASK_DESCRIPTION || '',
+    tokens_in: hookData.tokens_in || process.env.TOKENS_IN || '0',
+    tokens_out: hookData.tokens_out || process.env.TOKENS_OUT || '0',
+    duration_minutes: hookData.duration_minutes || process.env.DURATION || '0',
+    model: hookData.model || process.env.MODEL || 'unknown',
+    category: hookData.category,
+    timestamp: new Date().toISOString()
+  });
 
-  if (!tokens_in && !tokens_out) {
+  if (!normalized.tokens_in && !normalized.tokens_out) {
     process.exit(0); // Nothing to log
   }
 
   try {
-    await postLog({
-      title, description, category,
-      tokens_in, tokens_out,
-      tokens_total: tokens_in + tokens_out,
-      duration_minutes, model,
-      timestamp: new Date().toISOString()
-    });
-    console.log(`[dashboard] Logged: ${title} (${tokens_in + tokens_out} tokens)`);
+    await postLog(normalized);
+    console.log(`[dashboard] Logged: ${normalized.title} (${normalized.tokens_total} tokens)`);
   } catch (err) {
     console.error(`[dashboard] Log failed: ${err.message}`);
   }
